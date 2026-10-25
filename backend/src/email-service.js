@@ -1,6 +1,7 @@
 import {createHash,createHmac,randomBytes,createCipheriv,createDecipheriv} from 'node:crypto';
 import {db} from './db.js';
 import {isBeta} from './beta.js';
+import {smtpConfig,mailContent,sendSmtp} from './smtp-transport.js';
 
 const hash=s=>createHash('sha256').update(s).digest('hex');
 const hmac=(key,value)=>createHmac('sha256',key).update(value).digest();
@@ -39,7 +40,8 @@ export function createEmailService(options={}) {
   region:process.env.TENCENT_SES_REGION,from:process.env.TENCENT_SES_FROM};
  const templates={register:process.env.TENCENT_SES_TEMPLATE_REGISTER,bind:process.env.TENCENT_SES_TEMPLATE_BIND,
   reset:process.env.TENCENT_SES_TEMPLATE_RESET,password_changed:process.env.TENCENT_SES_TEMPLATE_PASSWORD_CHANGED,email_changed:process.env.TENCENT_SES_TEMPLATE_EMAIL_CHANGED};
- const enabled=!!options.send||!!(config.secretId&&config.secretKey&&['ap-hongkong','ap-guangzhou'].includes(config.region)&&normalizeEmail(config.from)&&Object.values(templates).every(v=>/^\d+$/.test(v||'')));
+ const smtp=smtpConfig();
+ const enabled=!!options.send||!!smtp||!!(config.secretId&&config.secretKey&&['ap-hongkong','ap-guangzhou'].includes(config.region)&&normalizeEmail(config.from)&&Object.values(templates).every(v=>/^\d+$/.test(v||'')));
  const now=options.now||Date.now;
  const encryptionKey=createHash('sha256').update('ddl-mail-outbox:'+process.env.JWT_SECRET).digest();
  const allowed=new Set((process.env.BETA_EMAIL_RECIPIENTS||'').split(',').map(normalizeEmail).filter(Boolean));
@@ -74,6 +76,7 @@ export function createEmailService(options={}) {
 
  async function send(mail) {
   if(options.send)return options.send(mail);
+  if(smtp)return sendSmtp(smtp,{...mail,...mailContent(mail,isBeta())});
   const titles={register:'注册邮箱验证',bind:'邮箱绑定验证',reset:'找回密码验证',password_changed:'密码变更通知',email_changed:'邮箱变更通知'};
   const payload={FromEmailAddress:'DDL Killer <'+config.from+'>',Destination:[mail.to],Subject:(isBeta()?'[Beta 测试] ':'')+'DDL Killer · '+titles[mail.purpose],
    Template:{TemplateID:Number(templates[mail.purpose]),TemplateData:JSON.stringify(mail.code?{code:mail.code}:{})},TriggerType:1,Unsubscribe:'0'};

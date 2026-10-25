@@ -313,7 +313,7 @@ docker compose --env-file .env.self-host -f compose.self-host.yaml up -d
 
 ## 7. 可选：邮件注册与找回密码
 
-当前邮件实现对接腾讯云 SES，没有 SMTP 配置入口。在自己的腾讯云账号中准备：
+邮件支持两种发信方式：腾讯云 SES，或通用 SMTP（见本节末尾的“使用 SMTP 发信”）。两者都配置时优先使用 SMTP。使用 SES 时，在自己的腾讯云账号中准备：
 
 - SES 支持区域：`ap-hongkong` 或 `ap-guangzhou`。
 - 已验证的发信域名和发信邮箱，按服务商要求配置 DNS 验证记录。
@@ -347,6 +347,22 @@ docker compose --env-file .env.self-host -f compose.self-host.yaml up -d plan-ap
 重新打开 `/api/auth/email/config`，确认 `enabled:true`，再用自己能收信的邮箱走完“获取验证码 → 收信 → 填码 → 注册 → 登录”。配置检查成功、SES 接受发信请求都不等于邮件已进入收件箱。
 
 邮件留空不会阻止后端启动；相关发码操作会返回服务不可用。首个初始化账号可以在邮件启用后绑定邮箱。正式实例不要设置 Beta 收件人白名单，也不要设置 `APP_CHANNEL=beta`。
+
+### 使用 SMTP 发信
+
+没有腾讯云账号时，可以改用任意支持 SMTP 的邮箱服务（如 QQ 邮箱、163 邮箱、企业邮箱），在 `.env.self-host` 中添加：
+
+```dotenv
+SMTP_HOST=smtp.example.com
+SMTP_PORT=465
+SMTP_USER=no-reply@example.com
+SMTP_PASS=REPLACE_WITH_APP_PASSWORD
+SMTP_SECURE=
+SMTP_FROM=
+EMAIL_DAILY_LIMIT=100
+```
+
+`SMTP_HOST`、`SMTP_USER`、`SMTP_PASS` 三项齐全即启用邮箱服务，无需任何腾讯云模板。端口 465 使用隐式 TLS，587 使用 STARTTLS；若服务器不支持 STARTTLS，程序会拒绝发送，不会以明文传输密码。`SMTP_FROM` 为纯邮箱地址，留空时使用 `SMTP_USER`。多数邮箱服务要求使用“授权码/应用专用密码”而不是登录密码。邮件正文为纯文本，包含 6 位验证码及 10 分钟有效期说明。修改后重新创建 `plan-api` 容器，并访问 `/api/auth/email/config` 确认 `enabled:true`。
 
 ## 8. 可选：AI 与语音
 
@@ -496,7 +512,7 @@ docker compose --env-file .env.self-host -f compose.self-host.yaml down
 
 - 根目录 Compose/Caddy 是本机示例；公网域名、证书、代理信任和备份仍需部署者独立配置。
 - `API_BASE` 只替换业务 API；应用内下载、更新检测、MCP说明、API Key教程、课表教程及部分分享或隐私链接仍包含上游地址。完整独立发行需要在 fork 中审阅并替换这些入口和相关政策内容；自建 APK 不能沿用上游签名或更新渠道。
-- 邮件仅实现腾讯云 SES；普通注册必须验证邮箱。没有邮箱服务时可初始化一个账号，但没有面向多用户的免邮件注册开关或 SMTP 适配。
+- 邮件支持腾讯云 SES 和通用 SMTP；普通注册必须验证邮箱。没有邮箱服务时可初始化一个账号，但没有面向多用户的免邮件注册开关。
 - AI 自定义地址的公网 HTTPS 限制使本地或内网模型不能直接接入。目前也没有纯浏览器、无后端的 AI Key 模式。
 - Web 和 Android 是本文核实的构建目标；仓库中的其他平台目录不代表已经完成发布适配。运行时的业务语言主要为中文。
 
